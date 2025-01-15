@@ -23,7 +23,28 @@ const client = new MongoClient(uri, {
 async function run() {
     try {
         // Connect the client to the server	(optional starting in v4.7)
-        await client.connect();
+        // await client.connect();
+
+        const userCollection = client.db("popularMedicalDB").collection("users");
+
+        app.get("/users", async (req, res) => {
+            const result = await userCollection.find().toArray();
+            res.send(result);
+          });
+
+          app.post("/users", async (req, res) => {
+            const usersData = req.body;
+            const query = { email: usersData?.email };
+            const existingUser = await userCollection.findOne(query);
+      
+            if (existingUser) {
+              return res.send({ message: 'User already exists', insertedId: null });
+            }
+      
+            const result = await userCollection.insertOne(usersData);
+            res.send(result);
+          });
+      
         // Send a ping to confirm a successful connection
         await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
