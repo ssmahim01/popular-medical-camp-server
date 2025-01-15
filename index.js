@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
@@ -7,7 +7,26 @@ const port = process.env.PORT || 5000;
 const app = express();
 
 app.use(express.json());
-app.use(cors());
+app.use(cors({
+    origin: "http://localhost:5173",
+    credentials: true
+}));
+
+const verifyToken = async (req, res, next) => {
+    const token = req.cookies?.token
+
+    if (!token) {
+        return res.status(401).send({ message: 'unauthorized access' })
+    }
+    jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+        if (err) {
+            console.log(err)
+            return res.status(401).send({ message: 'unauthorized access' })
+        }
+        req.user = decoded
+        next()
+    })
+}
 
 const uri = `mongodb+srv://${process.env.DB_USERNAME}:${process.env.DB_PASSWORD}@cluster0.ybs8l.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
@@ -30,21 +49,48 @@ async function run() {
         app.get("/users", async (req, res) => {
             const result = await userCollection.find().toArray();
             res.send(result);
-          });
+        });
 
-          app.post("/users", async (req, res) => {
+        app.get("/user/organizer/:email", async (req, res) => {
+            const organizerEmail = req.params.email;
+            const query = { email: organizerEmail };
+
+            const findUser = await userCollection.findOne(query);
+            if (findUser?.role === "Organizer") {
+                res.send(findUser);
+            }
+        });
+
+        app.post("/users", async (req, res) => {
             const usersData = req.body;
             const query = { email: usersData?.email };
             const existingUser = await userCollection.findOne(query);
-      
+
             if (existingUser) {
-              return res.send({ message: 'User already exists', insertedId: null });
+                return res.send({ message: 'User already exists', insertedId: null });
             }
-      
+
             const result = await userCollection.insertOne(usersData);
             res.send(result);
-          });
-      
+        });
+
+        app.patch("/organizer/update-profile/:id", async (req, res) => {
+            const organizerData = req.body;
+            const organizerId = req.params.id;
+            const filter = { _id: new ObjectId(organizerId) };
+
+            const updateData = {
+                $set: {
+                    name: organizerData?.name,
+                    image: organizerData?.image,
+                    contact: organizerData?.contact
+                }
+            }
+
+            const updateResult = await userCollection.updateOne(filter, updateData);
+            res.send(updateResult);
+        });
+
         // Send a ping to confirm a successful connection
         await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
