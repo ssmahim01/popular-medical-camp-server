@@ -26,8 +26,8 @@ async function run() {
         // await client.connect();
 
         const userCollection = client.db("popularMedicalDB").collection("users");
-
         const campCollection = client.db("popularMedicalDB").collection("camps");
+        const participantCollection = client.db("popularMedicalDB").collection("participants");
 
         const verifyToken = (req, res, next) => {
             if (!req.headers.authorization) {
@@ -61,6 +61,7 @@ async function run() {
             next();
           };
 
+        //   JWT API
           app.post("/jwt-access", (req, res) => {
             const userEmail = req.body;
             const token = jwt.sign(userEmail, process.env.ACCESS_TOKEN_SECRET, {expiresIn: "24h"});
@@ -68,6 +69,7 @@ async function run() {
             res.send({token});
           });
 
+        // Users collection
         app.get("/users", verifyToken, verifyOrganizer, async (req, res) => {
             const result = await userCollection.find().toArray();
             res.send(result);
@@ -113,6 +115,7 @@ async function run() {
             res.send(updateResult);
         });
 
+        // Camps collection
         app.get("/camps", async(req, res) => {
             const {search, sorted} = req.query;
 
@@ -155,6 +158,25 @@ async function run() {
             const campData = req.body;
             const insertResult = await campCollection.insertOne(campData);
             res.send(insertResult);
+        });
+        
+        app.patch("/participant-count/:id", async(req, res) => {
+            const id = req.params.id;
+            const filter = {_id: new ObjectId(id)};
+            
+            const updateParticipantCount = {
+                $inc: {participantCount: 1}
+            };
+            
+            const updateResult = await campCollection.updateOne(filter, updateParticipantCount);
+            res.send(updateResult);
+        });
+        
+        // Participants collection
+        app.post("/participants", async(req, res) => {
+            const participantData = req.body;
+            const postResult = await participantCollection.insertOne(participantData);
+            res.send(postResult);
         });
 
         // Send a ping to confirm a successful connection
