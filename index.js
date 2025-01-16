@@ -114,10 +114,42 @@ async function run() {
         });
 
         app.get("/camps", async(req, res) => {
-            const findCamps = campCollection.find();
+            const {search, sorted} = req.query;
+
+            let searchOption = {};
+            if(search){
+                searchOption = {campName: {$regex: search, $options: "i"}} 
+            }
+
+            let sortOption = {};
+            if(sorted === "participantCount"){
+                sortOption = {participantCount: -1}
+            }
+
+            if(sorted === "fees"){
+                sortOption = {fees: -1}
+            }
+
+            if(sorted === "campName"){
+                sortOption = {campName: 1}
+            }
+
+            const findCamps = campCollection.find(searchOption).sort(sortOption);
             const result = await findCamps.toArray();
             res.send(result);
         });
+
+        app.get("/camp/:id", async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) };
+      
+            const findResult = await campCollection.findOne(query);
+            if(!findResult){
+                return res.status(404).send({message: "Camp Not Found"})
+            }
+            
+            res.send(findResult);
+          });
 
         app.post("/camps", verifyToken, verifyOrganizer, async(req, res) => {
             const campData = req.body;
