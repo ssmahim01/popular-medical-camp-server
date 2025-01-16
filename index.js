@@ -7,26 +7,7 @@ const port = process.env.PORT || 5000;
 const app = express();
 
 app.use(express.json());
-app.use(cors({
-    origin: "http://localhost:5173",
-    credentials: true
-}));
-
-const verifyToken = async (req, res, next) => {
-    const token = req.cookies?.token
-
-    if (!token) {
-        return res.status(401).send({ message: 'unauthorized access' })
-    }
-    jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
-        if (err) {
-            console.log(err)
-            return res.status(401).send({ message: 'unauthorized access' })
-        }
-        req.user = decoded
-        next()
-    })
-}
+app.use(cors());
 
 const uri = `mongodb+srv://${process.env.DB_USERNAME}:${process.env.DB_PASSWORD}@cluster0.ybs8l.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
@@ -46,7 +27,48 @@ async function run() {
 
         const userCollection = client.db("popularMedicalDB").collection("users");
 
-        app.get("/users", async (req, res) => {
+        const campCollection = client.db("popularMedicalDB").collection("camps");
+
+        const verifyToken = (req, res, next) => {
+            if (!req.headers.authorization) {
+              return res.status(401).send({ message: 'Unauthorized Access' })
+            }
+        
+            const token = req.headers.authorization.split(' ')[1];
+        
+            jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (error, decoded) => {
+              if (error) {
+                return res.status(401).send({ message: 'Unauthorized Access' })
+              }
+        
+              req.decoded = decoded;
+              next();
+            })
+          };
+        
+          // Verify Organizer after verifyToken
+          const verifyOrganizer = async (req, res, next) => {
+            const email = req.decoded.email;
+            const query = { email: email };
+        
+            const user = await userCollection.findOne(query);
+            const isOrganizer = user?.role === 'Organizer';
+        
+            if (!isOrganizer) {
+              return res.status(403).send({ message: "Forbidden Access" });
+            }
+        
+            next();
+          };
+
+          app.post("/jwt-access", (req, res) => {
+            const userEmail = req.body;
+            const token = jwt.sign(userEmail, process.env.ACCESS_TOKEN_SECRET, {expiresIn: "24h"});
+
+            res.send({token});
+          });
+
+        app.get("/users", verifyToken, verifyOrganizer, async (req, res) => {
             const result = await userCollection.find().toArray();
             res.send(result);
         });
@@ -74,7 +96,7 @@ async function run() {
             res.send(result);
         });
 
-        app.patch("/organizer/update-profile/:id", async (req, res) => {
+        app.patch("/organizer/update-profile/:id", verifyToken, verifyOrganizer, async (req, res) => {
             const organizerData = req.body;
             const organizerId = req.params.id;
             const filter = { _id: new ObjectId(organizerId) };
@@ -89,6 +111,18 @@ async function run() {
 
             const updateResult = await userCollection.updateOne(filter, updateData);
             res.send(updateResult);
+        });
+
+        app.get("/camps", async(req, res) => {
+            const findCamps = campCollection.find();
+            const result = await findCamps.toArray();
+            res.send(result);
+        });
+
+        app.post("/camps", verifyToken, verifyOrganizer, async(req, res) => {
+            const campData = req.body;
+            const insertResult = await campCollection.insertOne(campData);
+            res.send(insertResult);
         });
 
         // Send a ping to confirm a successful connection
