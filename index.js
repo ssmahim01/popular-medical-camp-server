@@ -150,6 +150,23 @@ async function run() {
             res.send(popularCamps);
         });
 
+        app.put("/update-camp/:campId", verifyToken, verifyOrganizer, async(req, res) => {
+            const {campId} = req.params;
+            const query = {_id: new ObjectId(campId)};
+            const campData = req.body;
+            const updateCamp = {$set: campData};
+
+            const updateResult = await campCollection.updateOne(query, updateCamp);
+            res.send(updateResult);
+        });
+
+        app.delete("/delete-camp/:campId", verifyToken, verifyOrganizer, async(req, res) => {
+            const {campId} = req.params;
+            const filter = {_id: new ObjectId(campId)};
+            const deleteResult = await campCollection.deleteOne(filter);
+            res.send(deleteResult);
+        });
+
         app.get("/camp/:id", async (req, res) => {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) };
