@@ -31,43 +31,43 @@ async function run() {
 
         const verifyToken = (req, res, next) => {
             if (!req.headers.authorization) {
-              return res.status(401).send({ message: 'Unauthorized Access' })
-            }
-        
-            const token = req.headers.authorization.split(' ')[1];
-        
-            jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (error, decoded) => {
-              if (error) {
                 return res.status(401).send({ message: 'Unauthorized Access' })
-              }
-        
-              req.decoded = decoded;
-              next();
+            }
+
+            const token = req.headers.authorization.split(' ')[1];
+
+            jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (error, decoded) => {
+                if (error) {
+                    return res.status(401).send({ message: 'Unauthorized Access' })
+                }
+
+                req.decoded = decoded;
+                next();
             })
-          };
-        
-          // Verify Organizer after verifyToken
-          const verifyOrganizer = async (req, res, next) => {
+        };
+
+        // Verify Organizer after verifyToken
+        const verifyOrganizer = async (req, res, next) => {
             const email = req.decoded.email;
             const query = { email: email };
-        
+
             const user = await userCollection.findOne(query);
             const isOrganizer = user?.role === 'Organizer';
-        
+
             if (!isOrganizer) {
-              return res.status(403).send({ message: "Forbidden Access" });
+                return res.status(403).send({ message: "Forbidden Access" });
             }
-        
+
             next();
-          };
+        };
 
         //   JWT API
-          app.post("/jwt-access", (req, res) => {
+        app.post("/jwt-access", (req, res) => {
             const userEmail = req.body;
-            const token = jwt.sign(userEmail, process.env.ACCESS_TOKEN_SECRET, {expiresIn: "24h"});
+            const token = jwt.sign(userEmail, process.env.ACCESS_TOKEN_SECRET, { expiresIn: "24h" });
 
-            res.send({token});
-          });
+            res.send({ token });
+        });
 
         // Users collection
         app.get("/users", verifyToken, verifyOrganizer, async (req, res) => {
@@ -116,25 +116,25 @@ async function run() {
         });
 
         // Camps collection
-        app.get("/camps", async(req, res) => {
-            const {search, sorted} = req.query;
+        app.get("/camps", async (req, res) => {
+            const { search, sorted } = req.query;
 
             let searchOption = {};
-            if(search){
-                searchOption = {campName: {$regex: search, $options: "i"}} 
+            if (search) {
+                searchOption = { campName: { $regex: search, $options: "i" } }
             }
 
             let sortOption = {};
-            if(sorted === "participantCount"){
-                sortOption = {participantCount: -1}
+            if (sorted === "participantCount") {
+                sortOption = { participantCount: -1 }
             }
 
-            if(sorted === "fees"){
-                sortOption = {fees: -1}
+            if (sorted === "fees") {
+                sortOption = { fees: -1 }
             }
 
-            if(sorted === "campName"){
-                sortOption = {campName: 1}
+            if (sorted === "campName") {
+                sortOption = { campName: 1 }
             }
 
             const findCamps = campCollection.find(searchOption).sort(sortOption);
@@ -142,38 +142,46 @@ async function run() {
             res.send(result);
         });
 
+        app.get("/popular-camps", async (req, res) => {
+            const sortCount = { participantCount: - 1 };
+
+            const findCamps = campCollection.find({});
+            const popularCamps = await findCamps.sort(sortCount).limit(6).toArray();
+            res.send(popularCamps);
+        });
+
         app.get("/camp/:id", async (req, res) => {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) };
-      
-            const findResult = await campCollection.findOne(query);
-            if(!findResult){
-                return res.status(404).send({message: "Camp Not Found"})
-            }
-            
-            res.send(findResult);
-          });
 
-        app.post("/camps", verifyToken, verifyOrganizer, async(req, res) => {
+            const findResult = await campCollection.findOne(query);
+            if (!findResult) {
+                return res.status(404).send({ message: "Camp Not Found" })
+            }
+
+            res.send(findResult);
+        });
+
+        app.post("/camps", verifyToken, verifyOrganizer, async (req, res) => {
             const campData = req.body;
             const insertResult = await campCollection.insertOne(campData);
             res.send(insertResult);
         });
-        
-        app.patch("/participant-count/:id", async(req, res) => {
+
+        app.patch("/participant-count/:id", async (req, res) => {
             const id = req.params.id;
-            const filter = {_id: new ObjectId(id)};
-            
+            const filter = { _id: new ObjectId(id) };
+
             const updateParticipantCount = {
-                $inc: {participantCount: 1}
+                $inc: { participantCount: 1 }
             };
-            
+
             const updateResult = await campCollection.updateOne(filter, updateParticipantCount);
             res.send(updateResult);
         });
-        
+
         // Participants collection
-        app.post("/participants", async(req, res) => {
+        app.post("/participants", async (req, res) => {
             const participantData = req.body;
             const postResult = await participantCollection.insertOne(participantData);
             res.send(postResult);
