@@ -85,6 +85,19 @@ async function run() {
             }
         });
 
+        app.get("/organizer/:email", async (req, res) => {
+            const email = req.params.email;
+            const query = { email: email };
+            const loggedInUser = await userCollection.findOne(query);
+
+            let organizer = false;
+            if (loggedInUser) {
+                organizer = loggedInUser?.role === "Organizer"
+            }
+
+            res.send({ organizer });
+        });
+
         app.post("/users", async (req, res) => {
             const usersData = req.body;
             const query = { email: usersData?.email };
@@ -113,6 +126,23 @@ async function run() {
 
             const updateResult = await userCollection.updateOne(filter, updateData);
             res.send(updateResult);
+        });
+
+        // Participant Analytics
+        app.get("/analytics/:email", async(req, res) => {
+            const userEmail = req.params.email;
+            const findParticipantData = await participantCollection.find({participantEmail: userEmail}).toArray();
+
+            const campData = await campCollection.find().toArray();
+            const analyticsData = findParticipantData.map((participant) => {
+                const camp = campData.find((c) => c.campName === participant.campName);
+                return {
+                  ...participant,
+                  participantCount: camp ? camp.participantCount : 0,
+                };
+              });
+
+            res.send(analyticsData);
         });
 
         // Camps collection
@@ -150,19 +180,19 @@ async function run() {
             res.send(popularCamps);
         });
 
-        app.put("/update-camp/:campId", verifyToken, verifyOrganizer, async(req, res) => {
-            const {campId} = req.params;
-            const query = {_id: new ObjectId(campId)};
+        app.put("/update-camp/:campId", verifyToken, verifyOrganizer, async (req, res) => {
+            const { campId } = req.params;
+            const query = { _id: new ObjectId(campId) };
             const campData = req.body;
-            const updateCamp = {$set: campData};
+            const updateCamp = { $set: campData };
 
             const updateResult = await campCollection.updateOne(query, updateCamp);
             res.send(updateResult);
         });
 
-        app.delete("/delete-camp/:campId", verifyToken, verifyOrganizer, async(req, res) => {
-            const {campId} = req.params;
-            const filter = {_id: new ObjectId(campId)};
+        app.delete("/delete-camp/:campId", verifyToken, verifyOrganizer, async (req, res) => {
+            const { campId } = req.params;
+            const filter = { _id: new ObjectId(campId) };
             const deleteResult = await campCollection.deleteOne(filter);
             res.send(deleteResult);
         });
