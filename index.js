@@ -28,6 +28,7 @@ async function run() {
         const userCollection = client.db("popularMedicalDB").collection("users");
         const campCollection = client.db("popularMedicalDB").collection("camps");
         const participantCollection = client.db("popularMedicalDB").collection("participants");
+        const feedbackCollection = client.db("popularMedicalDB").collection("feedbacks");
 
         const verifyToken = (req, res, next) => {
             if (!req.headers.authorization) {
@@ -85,6 +86,16 @@ async function run() {
             }
         });
 
+        app.get("/user/participant/:email", async (req, res) => {
+            const participantEmail = req.params.email;
+            const query = { email: participantEmail };
+
+            const findParticipant = await userCollection.findOne(query);
+            if (findParticipant?.role === "Participant") {
+                res.send(findParticipant);
+            }
+        });
+
         app.get("/organizer/:email", async (req, res) => {
             const email = req.params.email;
             const query = { email: email };
@@ -121,6 +132,23 @@ async function run() {
                     name: organizerData?.name,
                     image: organizerData?.image,
                     contact: organizerData?.contact
+                }
+            }
+
+            const updateResult = await userCollection.updateOne(filter, updateData);
+            res.send(updateResult);
+        });
+
+        app.patch("/participant/update-profile/:id", verifyToken, async (req, res) => {
+            const participantData = req.body;
+            const participantId = req.params.id;
+            const filter = { _id: new ObjectId(participantId) };
+
+            const updateData = {
+                $set: {
+                    name: participantData?.name,
+                    image: participantData?.image,
+                    contact: participantData?.contact
                 }
             }
 
@@ -228,10 +256,33 @@ async function run() {
         });
 
         // Participants collection
+        app.get("/registered-camps/:email", async(req, res) => {
+            const email = req.params.email;
+            const query = {participantEmail: email};
+
+            const findRegisteredCamps = await participantCollection.find(query).toArray();
+            res.send(findRegisteredCamps);
+        });
+
         app.post("/participants", async (req, res) => {
             const participantData = req.body;
             const postResult = await participantCollection.insertOne(participantData);
             res.send(postResult);
+        });
+
+        app.delete("/cancel-registration/:id", async(req, res) => {
+            const id = req.params.id;
+            const query = {_id: new ObjectId(id)};
+
+            const cancelResult = await participantCollection.deleteOne(query);
+            res.send(cancelResult);
+        });
+
+        // Feedback collection
+        app.post("/feedback-data", verifyToken, async(req, res) => {
+            const feedback = req.body;
+            const insertResult = await feedbackCollection.insertOne(feedback);
+            res.send(insertResult);
         });
 
         // Send a ping to confirm a successful connection
