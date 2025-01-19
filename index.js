@@ -5,6 +5,7 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const port = process.env.PORT || 5000;
 const app = express();
+const stripe = require("stripe")(process.env.SECRET_KEY_STRIPE);
 
 app.use(express.json());
 app.use(cors());
@@ -29,6 +30,7 @@ async function run() {
         const campCollection = client.db("popularMedicalDB").collection("camps");
         const participantCollection = client.db("popularMedicalDB").collection("participants");
         const feedbackCollection = client.db("popularMedicalDB").collection("feedbacks");
+        const paymentCollection = client.db("popularMedicalDB").collection("payments");
 
         const verifyToken = (req, res, next) => {
             if (!req.headers.authorization) {
@@ -156,19 +158,50 @@ async function run() {
             res.send(updateResult);
         });
 
+        // Payment Intent
+        app.post("/create-payment-intent", async (req, res) => {
+            const { campFee } = req.body;
+            const amount = parseInt(campFee * 100);
+            const paymentIntent = await stripe.paymentIntents.create({
+                amount: amount,
+                currency: "usd",
+                payment_method_types: ["card"]
+            })
+
+            res.send({ clientSecret: paymentIntent.client_secret })
+        });
+
+        // Payments
+        app.post("/payments", async (req, res) => {
+            const paymentInfo = req.body;
+            const insertResult = await paymentCollection.insertOne(paymentInfo);
+
+            const campId = paymentInfo.campId;
+            const query = { _id: new ObjectId(campId) };
+
+            const updateStatus = {
+                $set: {
+                    paymentStatus: "Paid"
+                }
+            }
+
+            const updateResult = await participantCollection.updateOne(query, updateStatus);
+            res.send({ insertResult, updateResult });
+        });
+
         // Participant Analytics
-        app.get("/analytics/:email", async(req, res) => {
+        app.get("/analytics/:email", verifyToken, async (req, res) => {
             const userEmail = req.params.email;
-            const findParticipantData = await participantCollection.find({participantEmail: userEmail}).toArray();
+            const findParticipantData = await participantCollection.find({ participantEmail: userEmail }).toArray();
 
             const campData = await campCollection.find().toArray();
             const analyticsData = findParticipantData.map((participant) => {
                 const camp = campData.find((c) => c.campName === participant.campName);
                 return {
-                  ...participant,
-                  participantCount: camp ? camp.participantCount : 0,
+                    ...participant,
+                    participantCount: camp ? camp.participantCount : 0,
                 };
-              });
+            });
 
             res.send(analyticsData);
         });
@@ -225,7 +258,7 @@ async function run() {
             res.send(deleteResult);
         });
 
-        app.get("/camp/:id", async (req, res) => {
+        app.get("/camp/:id", verifyToken, async (req, res) => {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) };
 
@@ -243,43 +276,52 @@ async function run() {
             res.send(insertResult);
         });
 
-        app.patch("/participant-count/:id", async (req, res) => {
+        app.patch("/participant-count/:id", verifyToken, async (req, res) => {
             const id = req.params.id;
             const filter = { _id: new ObjectId(id) };
 
-            const updateParticipantCount = {
-                $inc: { participantCount: 1 }
-            };
-
+            const updateParticipantCount = { $inc: { participantCount: 1 } }
             const updateResult = await campCollection.updateOne(filter, updateParticipantCount);
             res.send(updateResult);
         });
 
         // Participants collection
-        app.get("/registered-camps/:email", async(req, res) => {
+        app.get("/registered-camps/:email", verifyToken, async (req, res) => {
             const email = req.params.email;
-            const query = {participantEmail: email};
+            const query = { participantEmail: email };
 
             const findRegisteredCamps = await participantCollection.find(query).toArray();
             res.send(findRegisteredCamps);
         });
 
-        app.post("/participants", async (req, res) => {
+        app.get("/participant/:id", verifyToken, async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) };
+
+            const findResult = await participantCollection.findOne(query);
+            if (!findResult) {
+                return res.status(404).send({ message: "Camp Not Found" })
+            }
+
+            res.send(findResult);
+        });
+
+        app.post("/participants", verifyToken, async (req, res) => {
             const participantData = req.body;
             const postResult = await participantCollection.insertOne(participantData);
             res.send(postResult);
         });
 
-        app.delete("/cancel-registration/:id", async(req, res) => {
+        app.delete("/cancel-registration/:id", verifyToken, async (req, res) => {
             const id = req.params.id;
-            const query = {_id: new ObjectId(id)};
+            const query = { _id: new ObjectId(id) };
 
             const cancelResult = await participantCollection.deleteOne(query);
             res.send(cancelResult);
         });
 
         // Feedback collection
-        app.post("/feedback-data", verifyToken, async(req, res) => {
+        app.post("/feedback-data", verifyToken, async (req, res) => {
             const feedback = req.body;
             const insertResult = await feedbackCollection.insertOne(feedback);
             res.send(insertResult);
