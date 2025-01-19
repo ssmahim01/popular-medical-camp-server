@@ -159,7 +159,7 @@ async function run() {
         });
 
         // Payment Intent
-        app.post("/create-payment-intent", async (req, res) => {
+        app.post("/create-payment-intent", verifyToken, async (req, res) => {
             const { campFee } = req.body;
             const amount = parseInt(campFee * 100);
             const paymentIntent = await stripe.paymentIntents.create({
@@ -172,21 +172,57 @@ async function run() {
         });
 
         // Payments
-        app.post("/payments", async (req, res) => {
+        app.get("/payment-history/:email", verifyToken, async (req, res) => {
+            const email = req.params.email;
+
+            const findPaymentHistory = await paymentCollection.aggregate([
+                {
+                    $match: { email: email }
+                },
+                {
+                    $addFields: {
+                        campId: { $toObjectId: '$campId' }
+                    }
+                },
+                {
+                    $lookup: {
+                        from: 'participants',
+                        localField: 'campId',
+                        foreignField: '_id',
+                        as: 'payments'
+                    }
+                },
+                { $unwind: '$payments' },
+                {
+                    $addFields: {
+                        paymentStatus: '$payments.paymentStatus',
+                        confirmationStatus: '$payments.confirmationStatus',
+                    }
+                },
+                {
+                    $project: {payments: 0}
+                }
+            ]).toArray();
+            res.send(findPaymentHistory);
+        });
+
+        app.post("/payments", verifyToken, async (req, res) => {
             const paymentInfo = req.body;
             const insertResult = await paymentCollection.insertOne(paymentInfo);
 
             const campId = paymentInfo.campId;
             const query = { _id: new ObjectId(campId) };
 
-            const updateStatus = {
+            let updateStatus = {
                 $set: {
                     paymentStatus: "Paid"
                 }
             }
 
+            const updatePaymentStatus = await paymentCollection.updateOne(query, updateStatus);
+
             const updateResult = await participantCollection.updateOne(query, updateStatus);
-            res.send({ insertResult, updateResult });
+            res.send({ insertResult, updateResult, updatePaymentStatus });
         });
 
         // Participant Analytics
