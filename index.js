@@ -294,7 +294,7 @@ async function run() {
             res.send(deleteResult);
         });
 
-        app.get("/camp/:id", verifyToken, async (req, res) => {
+        app.get("/camp/:id", async (req, res) => {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) };
 
@@ -322,6 +322,32 @@ async function run() {
         });
 
         // Participants collection
+        app.get("/participants", verifyToken, verifyOrganizer, async(req, res) => {
+            const findParticipantData = await participantCollection.aggregate([
+                {
+                    $sort: { campFees: -1 }
+                },
+                {
+                    $lookup: {
+                        from: 'payments',
+                        localField: 'paymentStatus',
+                        foreignField: 'paymentStatus',
+                        as: 'payments'
+                    }
+                },
+                { $unwind: '$payments' },
+                {
+                    $addFields: {
+                        paymentStatus: '$payments.paymentStatus',
+                    }
+                },
+                {
+                    $project: {payments: 0}
+                }
+            ]).toArray();
+            res.send(findParticipantData);
+        });
+
         app.get("/registered-camps/:email", verifyToken, async (req, res) => {
             const email = req.params.email;
             const query = { participantEmail: email };
@@ -346,6 +372,20 @@ async function run() {
             const participantData = req.body;
             const postResult = await participantCollection.insertOne(participantData);
             res.send(postResult);
+        });
+
+        app.patch("/confirmation-status/:id", verifyToken, verifyOrganizer, async (req, res) => {
+            const participantId = req.params.id;
+            const filter = { _id: new ObjectId(participantId) };
+
+            const updateData = {
+                $set: {
+                   confirmationStatus: "Confirmed"
+                }
+            }
+
+            const updateResult = await participantCollection.updateOne(filter, updateData);
+            res.send(updateResult);
         });
 
         app.delete("/cancel-registration/:id", verifyToken, async (req, res) => {
