@@ -200,7 +200,7 @@ async function run() {
                     }
                 },
                 {
-                    $project: {payments: 0}
+                    $project: { payments: 0 }
                 }
             ]).toArray();
             res.send(findPaymentHistory);
@@ -322,7 +322,7 @@ async function run() {
         });
 
         // Participants collection
-        app.get("/participants", verifyToken, verifyOrganizer, async(req, res) => {
+        app.get("/participants", verifyToken, verifyOrganizer, async (req, res) => {
             const findParticipantData = await participantCollection.aggregate([
                 {
                     $sort: { campFees: -1 }
@@ -342,7 +342,7 @@ async function run() {
                     }
                 },
                 {
-                    $project: {payments: 0}
+                    $project: { payments: 0 }
                 }
             ]).toArray();
             res.send(findParticipantData);
@@ -380,7 +380,7 @@ async function run() {
 
             const updateData = {
                 $set: {
-                   confirmationStatus: "Confirmed"
+                    confirmationStatus: "Confirmed"
                 }
             }
 
@@ -397,6 +397,11 @@ async function run() {
         });
 
         // Feedback collection
+        app.get("/feedbacks", async (req, res) => {
+            const feedbacksResult = await feedbackCollection.find().toArray();
+            res.send(feedbacksResult);
+        });
+
         app.post("/feedback-data", verifyToken, async (req, res) => {
             const feedback = req.body;
             const insertResult = await feedbackCollection.insertOne(feedback);
