@@ -73,7 +73,7 @@ async function run() {
         });
 
         // Users collection
-        app.get("/users", verifyToken, verifyOrganizer, async (req, res) => {
+        app.get("/users", verifyToken, async (req, res) => {
             const result = await userCollection.find().toArray();
             res.send(result);
         });
@@ -175,6 +175,8 @@ async function run() {
         app.get("/payment-history/:email", verifyToken, async (req, res) => {
             const email = req.params.email;
             const search = req.query.search || "";
+            const page = parseInt(req.query.page);
+            const size = parseInt(req.query.size);
 
             const findPaymentHistory = await paymentCollection.aggregate([
                 {
@@ -219,8 +221,13 @@ async function run() {
                 {
                     $project: { payments: 0 }
                 }
-            ]).toArray();
+            ]).skip(page * size).limit(size).toArray();
             res.send(findPaymentHistory);
+        });
+
+        app.get("/history-count", async(req, res) => {
+            const count = await paymentCollection.estimatedDocumentCount();
+            res.send({count});
         });
 
         app.post("/payments", verifyToken, async (req, res) => {
@@ -262,6 +269,8 @@ async function run() {
         // Camps collection
         app.get("/camps", async (req, res) => {
             const { search, sorted } = req.query;
+            const page = parseInt(req.query.page);
+            const size = parseInt(req.query.size);
 
             let searchOptions = {
                 $or: [
@@ -287,7 +296,7 @@ async function run() {
             }
 
             const findCamps = campCollection.find(searchOptions).sort(sortOption);
-            const result = await findCamps.toArray();
+            const result = await findCamps.skip(page * size).limit(size).toArray();
             res.send(result);
         });
 
@@ -328,6 +337,16 @@ async function run() {
             res.send(findResult);
         });
 
+        app.get("/camps-count", async(req, res) => {
+            const count = await campCollection.estimatedDocumentCount();
+            res.send({count});
+        });
+
+        app.get("/participants-count", async(req, res) => {
+            const count = await participantCollection.estimatedDocumentCount();
+            res.send({count});
+        });
+
         app.post("/camps", verifyToken, verifyOrganizer, async (req, res) => {
             const campData = req.body;
             const insertResult = await campCollection.insertOne(campData);
@@ -346,6 +365,9 @@ async function run() {
         // Participants collection
         app.get("/participants", verifyToken, verifyOrganizer, async (req, res) => {
             const search = req.query.search || "";
+            const page = parseInt(req.query.page);
+            const size = parseInt(req.query.size);
+
             const findParticipantData = await participantCollection.aggregate([
                 {
                     $sort: { campFees: -1 }
@@ -379,16 +401,32 @@ async function run() {
                         ]
                     }
                 },
-                {
-                    $project: { payments: 0 }
-                }
-            ]).toArray();
-            res.send(findParticipantData);
+                // {
+                //     $project: { payments: 0 }
+                // },
+                // {
+                //     $skip: page * size
+                // },
+                // {
+                //     $limit: size
+                // }
+            ]).skip(page * size)
+            .limit(size)
+            .toArray();
+                
+          res.send(findParticipantData);
+        });
+
+        app.get("/joined-camps-count", async(req, res) => {
+            const count = await participantCollection.estimatedDocumentCount();
+            res.send({count});
         });
 
         app.get("/registered-camps/:email", verifyToken, async (req, res) => {
             const email = req.params.email;
             const search = req.query.search || "";
+            const page = parseInt(req.query.page);
+            const size = parseInt(req.query.size);
 
             const query = {
                 participantEmail: email, $or: [
@@ -400,7 +438,7 @@ async function run() {
                 ]
             };
 
-            const findRegisteredCamps = await participantCollection.find(query).toArray();
+            const findRegisteredCamps = await participantCollection.find(query).skip(page * size).limit(size).toArray();
             res.send(findRegisteredCamps);
         });
 
@@ -446,7 +484,7 @@ async function run() {
 
         // Feedback collection
         app.get("/feedbacks", async (req, res) => {
-            const feedbacksResult = await feedbackCollection.find().toArray();
+            const feedbacksResult = await feedbackCollection.find().sort({date: - 1}).toArray();
             res.send(feedbacksResult);
         });
 
@@ -457,8 +495,8 @@ async function run() {
         });
 
         // Send a ping to confirm a successful connection
-        await client.db("admin").command({ ping: 1 });
-        console.log("Pinged your deployment. You successfully connected to MongoDB!");
+        // await client.db("admin").command({ ping: 1 });
+        // console.log("Pinged your deployment. You successfully connected to MongoDB!");
     } finally {
         // Ensures that the client will close when you finish/error
         // await client.close();
