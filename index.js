@@ -174,6 +174,7 @@ async function run() {
         // Payments
         app.get("/payment-history/:email", verifyToken, async (req, res) => {
             const email = req.params.email;
+            const search = req.query.search || "";
 
             const findPaymentHistory = await paymentCollection.aggregate([
                 {
@@ -195,8 +196,24 @@ async function run() {
                 { $unwind: '$payments' },
                 {
                     $addFields: {
+                        campName: '$payments.campName',
+                        campFees: '$payments.campFees',
                         paymentStatus: '$payments.paymentStatus',
                         confirmationStatus: '$payments.confirmationStatus',
+                    }
+                },
+                {
+                    $match: {
+                        $or: [
+                            { campName: { $regex: search, $options: "i" } },
+                            { campFees: { $regex: search, $options: "i" } },
+                            {
+                                paymentStatus: { $regex: search, $options: "i" }
+                            },
+                            {
+                                confirmationStatus: { $regex: search, $options: "i" }
+                            }
+                        ]
                     }
                 },
                 {
@@ -246,10 +263,15 @@ async function run() {
         app.get("/camps", async (req, res) => {
             const { search, sorted } = req.query;
 
-            let searchOption = {};
-            if (search) {
-                searchOption = { campName: { $regex: search, $options: "i" } }
-            }
+            let searchOptions = {
+                $or: [
+                    { campName: { $regex: search, $options: "i" } },
+                    { dateTime: { $regex: search, $options: "i" } },
+                    {
+                        professionalName: { $regex: search, $options: "i" }
+                    }
+                ]
+            };
 
             let sortOption = {};
             if (sorted === "participantCount") {
@@ -264,7 +286,7 @@ async function run() {
                 sortOption = { campName: 1 }
             }
 
-            const findCamps = campCollection.find(searchOption).sort(sortOption);
+            const findCamps = campCollection.find(searchOptions).sort(sortOption);
             const result = await findCamps.toArray();
             res.send(result);
         });
@@ -323,6 +345,7 @@ async function run() {
 
         // Participants collection
         app.get("/participants", verifyToken, verifyOrganizer, async (req, res) => {
+            const search = req.query.search || "";
             const findParticipantData = await participantCollection.aggregate([
                 {
                     $sort: { campFees: -1 }
@@ -330,15 +353,30 @@ async function run() {
                 {
                     $lookup: {
                         from: 'payments',
-                        localField: 'paymentStatus',
+                        localField: '_id',
                         foreignField: 'paymentStatus',
                         as: 'payments'
                     }
                 },
-                { $unwind: '$payments' },
                 {
-                    $addFields: {
-                        paymentStatus: '$payments.paymentStatus',
+                    $unwind: {
+                      path: "$payments",
+                      preserveNullAndEmptyArrays: true,
+                    }
+                },
+                {
+                    $match: {
+                        $or: [
+                            { participantName: { $regex: search, $options: "i" } },
+                            { campName: { $regex: search, $options: "i" } },
+                            { campFees: { $regex: search, $options: "i" } },
+                            {
+                                paymentStatus: { $regex: search, $options: "i" }
+                            },
+                            {
+                                confirmationStatus: { $regex: search, $options: "i" }
+                            }
+                        ]
                     }
                 },
                 {
@@ -350,7 +388,17 @@ async function run() {
 
         app.get("/registered-camps/:email", verifyToken, async (req, res) => {
             const email = req.params.email;
-            const query = { participantEmail: email };
+            const search = req.query.search || "";
+
+            const query = {
+                participantEmail: email, $or: [
+                    { campName: { $regex: search, $options: "i" } },
+                    { campFees: { $regex: search, $options: "i" } },
+                    {
+                        paymentStatus: { $regex: search, $options: "i" }
+                    }
+                ]
+            };
 
             const findRegisteredCamps = await participantCollection.find(query).toArray();
             res.send(findRegisteredCamps);
