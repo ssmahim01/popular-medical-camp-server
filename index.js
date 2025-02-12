@@ -3,12 +3,18 @@ const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
+const getImageBuffer = require('./src/utils/getImageBuffer');
+const generateImageUrl = require('./src/utils/generateImageURL');
 const port = process.env.PORT || 5000;
 const app = express();
 const stripe = require("stripe")(process.env.SECRET_KEY_STRIPE);
 
 app.use(express.json());
 app.use(cors());
+app.use((req, res, next) => {
+    console.log(`A request from ${req.hostname} || ${req.method} - ${req.url} at ${new Date().toLocaleTimeString()}`);
+    next();
+})
 
 const uri = `mongodb+srv://${process.env.DB_USERNAME}:${process.env.DB_PASSWORD}@cluster0.ybs8l.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
@@ -31,6 +37,7 @@ async function run() {
         const participantCollection = client.db("popularMedicalDB").collection("participants");
         const feedbackCollection = client.db("popularMedicalDB").collection("feedbacks");
         const paymentCollection = client.db("popularMedicalDB").collection("payments");
+        const imageCollection = client.db("popularMedicalDB").collection("aiImages");
 
         const verifyToken = (req, res, next) => {
             if (!req.headers.authorization) {
@@ -225,9 +232,9 @@ async function run() {
             res.send(findPaymentHistory);
         });
 
-        app.get("/history-count", async(req, res) => {
+        app.get("/history-count", async (req, res) => {
             const count = await paymentCollection.estimatedDocumentCount();
-            res.send({count});
+            res.send({ count });
         });
 
         app.post("/payments", verifyToken, async (req, res) => {
@@ -337,14 +344,14 @@ async function run() {
             res.send(findResult);
         });
 
-        app.get("/camps-count", async(req, res) => {
+        app.get("/camps-count", async (req, res) => {
             const count = await campCollection.estimatedDocumentCount();
-            res.send({count});
+            res.send({ count });
         });
 
-        app.get("/participants-count", async(req, res) => {
+        app.get("/participants-count", async (req, res) => {
             const count = await participantCollection.estimatedDocumentCount();
-            res.send({count});
+            res.send({ count });
         });
 
         app.post("/camps", verifyToken, verifyOrganizer, async (req, res) => {
@@ -382,8 +389,8 @@ async function run() {
                 },
                 {
                     $unwind: {
-                      path: "$payments",
-                      preserveNullAndEmptyArrays: true,
+                        path: "$payments",
+                        preserveNullAndEmptyArrays: true,
                     }
                 },
                 {
@@ -411,15 +418,15 @@ async function run() {
                 //     $limit: size
                 // }
             ]).skip(page * size)
-            .limit(size)
-            .toArray();
-                
-          res.send(findParticipantData);
+                .limit(size)
+                .toArray();
+
+            res.send(findParticipantData);
         });
 
-        app.get("/joined-camps-count", async(req, res) => {
+        app.get("/joined-camps-count", async (req, res) => {
             const count = await participantCollection.estimatedDocumentCount();
-            res.send({count});
+            res.send({ count });
         });
 
         app.get("/registered-camps/:email", verifyToken, async (req, res) => {
@@ -484,7 +491,7 @@ async function run() {
 
         // Feedback collection
         app.get("/feedbacks", async (req, res) => {
-            const feedbacksResult = await feedbackCollection.find().sort({date: - 1}).toArray();
+            const feedbacksResult = await feedbackCollection.find().sort({ date: - 1 }).toArray();
             res.send(feedbacksResult);
         });
 
@@ -492,6 +499,46 @@ async function run() {
             const feedback = req.body;
             const insertResult = await feedbackCollection.insertOne(feedback);
             res.send(insertResult);
+        });
+
+        // Ai related api
+        app.post("/generate", async (req, res) => {
+            const { username, email, userImg, prompt, category } = req.body;
+
+            if (!username || !email || !userImg || !prompt || !category) {
+                res.status(400).send({ message: "Please provide information include username, email, userImg, prompt, category" })
+                return;
+            }
+
+            try {
+                // Create a final prompt generate image buffer
+                const buffer = await getImageBuffer(prompt, category);
+                console.log(buffer);
+
+                // Upload image and get URL
+                const data = await generateImageUrl(buffer, prompt);
+                console.log(data);
+
+                // Insert data in MongoDB
+                const info = {
+                    username,
+                    email,
+                    userImg,
+                    prompt,
+                    category,
+                    originalImg: data.data.url,
+                    generatedImg: data.data.thumb.url,
+                    mediumImg: data.data.medium.url,
+                    createdAt: new Date().toISOString()
+                }
+                const result = await imageCollection.insertOne(info);
+
+                // Send response
+                res.send({...result, url: info.originalImg});
+            } catch (error) {
+                console.log(error);
+                res.status(500).send(error);
+            }
         });
 
         // Send a ping to confirm a successful connection
