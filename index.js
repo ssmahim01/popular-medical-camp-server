@@ -3,8 +3,6 @@ const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
-const getImageBuffer = require('./src/utils/getImageBuffer');
-const generateImageUrl = require('./src/utils/generateImageURL');
 const port = process.env.PORT || 5000;
 const app = express();
 const stripe = require("stripe")(process.env.SECRET_KEY_STRIPE);
@@ -315,6 +313,14 @@ async function run() {
             res.send(popularCamps);
         });
 
+        app.get("/affordable-camps", async (req, res) => {
+            const sortedByPrice = { fees : 1 };
+
+            const findCamps = campCollection.find({});
+            const affordableCamps = await findCamps.sort(sortedByPrice).limit(6).toArray();
+            res.send(affordableCamps);
+        });
+
         app.put("/update-camp/:campId", verifyToken, verifyOrganizer, async (req, res) => {
             const { campId } = req.params;
             const query = { _id: new ObjectId(campId) };
@@ -502,41 +508,30 @@ async function run() {
         });
 
         // Ai related api
-        app.post("/generate", async (req, res) => {
-            const { username, email, userImg, prompt, category } = req.body;
+        app.get("/ai-images/:email", verifyToken, async (req, res) => {
+            const userEmail = req.params.email;
+            const query = {email: userEmail};
+            const result = await imageCollection.find(query).toArray();
+            res.send(result);
+        });
 
-            if (!username || !email || !userImg || !prompt || !category) {
-                res.status(400).send({ message: "Please provide information include username, email, userImg, prompt, category" })
+        app.post("/generate", verifyToken, async (req, res) => {
+            const generatedData = req.body;
+            // console.log(generatedData);
+
+            if (!generatedData) {
+                res.status(400).send({ message: "An image generate before must get required information" })
                 return;
             }
 
             try {
-                // Create a final prompt generate image buffer
-                const buffer = await getImageBuffer(prompt, category);
-                console.log(buffer);
-
-                // Upload image and get URL
-                const data = await generateImageUrl(buffer, prompt);
-                console.log(data);
-
                 // Insert data in MongoDB
-                const info = {
-                    username,
-                    email,
-                    userImg,
-                    prompt,
-                    category,
-                    originalImg: data.data.url,
-                    generatedImg: data.data.thumb.url,
-                    mediumImg: data.data.medium.url,
-                    createdAt: new Date().toISOString()
-                }
-                const result = await imageCollection.insertOne(info);
+                const result = await imageCollection.insertOne(generatedData);
 
                 // Send response
-                res.send({...result, url: info.originalImg});
+                res.send(result);
             } catch (error) {
-                console.log(error);
+                // console.log(error);
                 res.status(500).send(error);
             }
         });
