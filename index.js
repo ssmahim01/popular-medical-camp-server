@@ -254,6 +254,67 @@ async function run() {
             res.send({ insertResult, updateResult, updatePaymentStatus });
         });
 
+        // APIs of Dashboard
+        app.get("/organizer-stats", verifyToken, verifyOrganizer, async (req, res) => {
+            const users = await userCollection.estimatedDocumentCount();
+            const camps = await campCollection.estimatedDocumentCount();
+            const registers = await paymentCollection.estimatedDocumentCount();
+
+            const result = await paymentCollection.aggregate([
+                {
+                    $group: {
+                        _id: null,
+                        totalFees: { $sum: { $toDouble: "$campFees" } }
+                    }
+                }
+            ]).toArray();
+
+            const fees = result.length > 0 ? result[0].totalFees : 0;
+
+            res.send({ users, camps, registers, fees });
+        });
+
+        app.get("/participant-stats", verifyToken, async (req, res) => {
+            const userEmail = req.query.email;
+
+            if (!userEmail) {
+                return res.status(400).send({ message: "Email is required" });
+            }
+
+            const result = await paymentCollection.aggregate([
+                {
+                    $match: { email: userEmail } // Filter data by user's email
+                },
+                {
+                    $group: {
+                        _id: null,
+                        totalRevenue: { $sum: { $toDouble: "$campFees" } }, // Sum of all campFees
+                        totalRegisteredCamps: { $sum: 1 }, // Count registrations
+                    }
+                }
+            ]).toArray();
+
+            const fees = result.length > 0 ? result[0].totalRevenue : 0;
+            const registers = result.length > 0 ? result[0].totalRegisteredCamps : 0;
+
+            res.send({ registers, fees });
+        });
+
+        app.get("/registers-stats", verifyToken, verifyOrganizer, async (req, res) => {
+            const findPaymentData = await paymentCollection.find({}).toArray();
+
+            const campData = await campCollection.find().toArray();
+            const chartData = findPaymentData.map((payment) => {
+                const camp = campData.find((c) => c.campName === payment.campName);
+                return {
+                    ...payment,
+                    participantCount: camp ? camp.participantCount : 0,
+                };
+            });
+
+            res.send(chartData);
+        });
+
         // Participant Analytics
         app.get("/analytics/:email", verifyToken, async (req, res) => {
             const userEmail = req.params.email;
@@ -314,7 +375,7 @@ async function run() {
         });
 
         app.get("/affordable-camps", async (req, res) => {
-            const sortedByPrice = { fees : 1 };
+            const sortedByPrice = { fees: 1 };
 
             const findCamps = campCollection.find({});
             const affordableCamps = await findCamps.sort(sortedByPrice).limit(6).toArray();
@@ -510,7 +571,7 @@ async function run() {
         // Ai related api
         app.get("/ai-images/:email", verifyToken, async (req, res) => {
             const userEmail = req.params.email;
-            const query = {email: userEmail};
+            const query = { email: userEmail };
             const result = await imageCollection.find(query).toArray();
             res.send(result);
         });
