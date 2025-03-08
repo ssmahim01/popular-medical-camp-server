@@ -558,6 +558,11 @@ async function run() {
 
         // Feedback collection
         app.get("/feedbacks", async (req, res) => {
+            const feedbacksResult = await feedbackCollection.find().sort({ date: - 1 }).limit(6).toArray();
+            res.send(feedbacksResult);
+        });
+
+        app.get("/all-feedbacks", async (req, res) => {
             const feedbacksResult = await feedbackCollection.find().sort({ date: - 1 }).toArray();
             res.send(feedbacksResult);
         });
