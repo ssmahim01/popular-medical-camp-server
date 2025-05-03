@@ -230,7 +230,7 @@ async function run() {
             res.send(findPaymentHistory);
         });
 
-        app.get("/history-count", async (req, res) => {
+        app.get("/history-count", verifyToken, async (req, res) => {
             const query = req.query.email;
 
             if (!query) {
