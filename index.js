@@ -230,8 +230,9 @@ async function run() {
             res.send(findPaymentHistory);
         });
 
-        app.get("/history-count", async (req, res) => {
-            const count = await paymentCollection.estimatedDocumentCount();
+        app.get("/history-count/:email", async (req, res) => {
+            const email = req.params.email;
+            const count = await paymentCollection.estimatedDocumentCount(email);
             res.send({ count });
         });
 
@@ -411,8 +412,9 @@ async function run() {
             res.send(findResult);
         });
 
-        app.get("/camps-count", async (req, res) => {
-            const count = await campCollection.estimatedDocumentCount();
+        app.get("/camps-count/:email", async (req, res) => {
+            const email = req.params.email;
+            const count = await campCollection.estimatedDocumentCount(email);
             res.send({ count });
         });
 
