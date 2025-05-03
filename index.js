@@ -230,9 +230,13 @@ async function run() {
             res.send(findPaymentHistory);
         });
 
-        app.get("/history-count/:email", async (req, res) => {
-            const email = req.params.email;
-            const count = await paymentCollection.estimatedDocumentCount(email);
+        app.get("/history-count", async (req, res) => {
+            const query = req.query.email;
+
+            if (!query) {
+                res.status(400).send({ message: "Email query parameter is required" })
+            }
+            const count = await paymentCollection.countDocuments({ email: query });
             res.send({ count });
         });
 
@@ -412,14 +416,13 @@ async function run() {
             res.send(findResult);
         });
 
-        app.get("/camps-count/:email", async (req, res) => {
-            const email = req.params.email;
-            const count = await campCollection.estimatedDocumentCount(email);
+        app.get("/camps-count", async (req, res) => {
+            const count = await campCollection.countDocuments();
             res.send({ count });
         });
 
         app.get("/participants-count", async (req, res) => {
-            const count = await participantCollection.estimatedDocumentCount();
+            const count = await participantCollection.countDocuments();
             res.send({ count });
         });
 
@@ -493,9 +496,15 @@ async function run() {
             res.send(findParticipantData);
         });
 
-        app.get("/joined-camps-count/:email", async (req, res) => {
-            const email = req.params.email;
-            const count = await participantCollection.estimatedDocumentCount(email);
+        app.get("/joined-camps-count", verifyToken, async (req, res) => {
+            const query = req.query.email;
+
+            if (!query) {
+                res.status(400).send({ message: "Email query parameter is required" })
+            }
+            const count = await participantCollection.countDocuments({
+                participantEmail: query
+            });
             res.send({ count });
         });
 
