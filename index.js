@@ -491,8 +491,9 @@ async function run() {
             res.send(findParticipantData);
         });
 
-        app.get("/joined-camps-count", async (req, res) => {
-            const count = await participantCollection.estimatedDocumentCount();
+        app.get("/joined-camps-count/:email", async (req, res) => {
+            const email = req.params.email;
+            const count = await participantCollection.estimatedDocumentCount(email);
             res.send({ count });
         });
 
